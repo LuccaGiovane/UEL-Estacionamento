@@ -1,6 +1,72 @@
 // middleware.cpp
-#include "middleware.h"
 #include <iostream>
+#include <string>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include "middleware.h"
+
+using namespace std;
+
+void Middleware::startListening() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+
+    // Criando socket
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        std::cerr << "Falha ao criar o socket" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    // Configurando opções do socket
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        std::cerr << "Erro nas opções do socket" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(stationPort);
+
+    // Ligando o socket a porta definida
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << "Erro ao ligar o socket" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    // Ouvindo conexões
+    if (listen(server_fd, 3) < 0) {
+        std::cerr << "Erro ao ouvir conexões" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    std::cout << "Middleware está ouvindo em " << stationIP << ":" << stationPort << std::endl;
+
+    while (true) {
+        if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+            std::cerr << "Erro ao aceitar conexão" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        char buffer[1024] = {0};
+        int valread = read(new_socket, buffer, 1024);
+        std::string message(buffer, valread);
+
+        std::cout << "Mensagem recebida: " << message << std::endl;
+
+        // Processar a mensagem recebida
+        receiveMessage(message);
+
+        // Responder a estação
+        std::string response = "OK";
+        send(new_socket, response.c_str(), response.length(), 0);
+
+        // Fechar o socket de conexão
+        close(new_socket);
+    }
+}
 
 Middleware::Middleware(const std::string& name, const std::string& ip, int port)
         : stationName(name), stationIP(ip), stationPort(port) {
@@ -10,10 +76,42 @@ Middleware::Middleware(const std::string& name, const std::string& ip, int port)
     }
 }
 
-void Middleware::connectToManager(const std::string& managerIP, int managerPort) {
-    // Conectar ao gerente para iniciar a comunicação
-    sendMessage("Connect", managerIP, managerPort);
+bool Middleware::connectToManager(const std::string& manager_ip, int manager_port) {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        std::cerr << "Erro na criação do socket" << std::endl;
+        return false;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(manager_port);
+
+    if (inet_pton(AF_INET, manager_ip.c_str(), &serv_addr.sin_addr) <= 0) {
+        std::cerr << "Endereço inválido/ não suportado" << std::endl;
+        return false;
+    }
+
+    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        std::cerr << "Conexão com o gerente falhou" << std::endl;
+        return false;
+    }
+
+    std::cout << "Conectado ao gerente com sucesso!" << std::endl;
+
+    manager_socket = sock;
+    return true;  // Retorna true se a conexão foi bem-sucedida
 }
+
+void Middleware::activateStation() {
+    if (connectToManager(manager_ip, manager_port)) {
+        std::string activation_msg = "AE";
+        send(manager_socket, activation_msg.c_str(), activation_msg.length(), 0);
+        std::cout << "Mensagem de ativação enviada ao gerente" << std::endl;
+    }
+}
+
 
 void Middleware::connectToStation(const std::string& stationIP, int stationPort) {
     // Conectar a outra estação e atualizar a árvore de encaminhamento
