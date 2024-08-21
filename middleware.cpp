@@ -15,7 +15,7 @@ void Middleware::startListening() {
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         std::cerr << "[LOG] Falha ao criar o socket" << std::endl;
-        exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);//
     }
 
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {

@@ -17,7 +17,7 @@ int main() {
     MainControl.printParkingTickets();
     MainControl.readCommandFromFile("commands.txt");
 
-    // Esperar as threads terminarem
+    // Esperar as threads terminarem //
     t1.join();
     t2.join();
 
