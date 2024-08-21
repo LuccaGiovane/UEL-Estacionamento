@@ -26,7 +26,7 @@ public:
     char getStatus(int ind);
 
 private:
-    
+
     vector<thread> newThread;
     int carNumber;
     int actNumber;

@@ -28,6 +28,8 @@ private:
     std::string stationIP;
     int stationPort;
     int manager_socket;
+    std::string manager_ip;
+    int manager_port;
     std::map<int, bool> spots;  // Mapeamento de número da vaga para disponibilidade
     std::map<std::string, int> connectedStations;  // IP da estação conectada para sua porta
 };
