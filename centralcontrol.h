@@ -1,39 +1,35 @@
-#include <sys/socket.h>
+#ifndef CENTRALCONTROL_H
+#define CENTRALCONTROL_H
 
 #include <string>
 #include <array>
-#include <unistd.h>
-#include <arpa/inet.h>
-
+#include <vector>
+#include <thread>
 #include "car.h"
 
-using namespace std;
-
-
-class CentralControl:  public Car{
+class CentralControl : public Car {
 public:
-    void readCommandFromFile(string cmdFile);
-    void handleCommand(string cmd, string dest_IP, int dest_Port);
+    void readCommandFromFile(std::string cmdFile);
+    void handleCommand(std::string cmd, std::string dest_IP, int dest_Port);
 
     CentralControl();
     ~CentralControl();
-    void readfile(string);
+    void readfile(std::string filename);
     void printParkingTickets();
-    void selectExit(string& station, string&  addr, int * p);
-    string getName(int ind);
-    string getIpAddress (int ind);
+    void selectExit(std::string& station, std::string& addr, int* p);
+    std::string getName(int ind);
+    std::string getIpAddress(int ind);
     int getPort(int ind);
     char getStatus(int ind);
 
 private:
-    
-    vector<thread> newThread;
-    int carNumber;
+    std::vector<std::thread> newThread;
     int actNumber;
-
-
-    array <string,10> name;
-    array <string,10> ipaddress;
-    array <int,10> port;
-    array <char,10> status; // 0=offline   1=online
+    int carNumber;
+    std::array<std::string, 10> name;
+    std::array<std::string, 10> ipaddress;
+    std::array<int, 10> port;
+    std::array<char, 10> status;
 };
+
+#endif
