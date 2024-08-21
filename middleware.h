@@ -1,4 +1,3 @@
-// middleware.h
 #ifndef MIDDLEWARE_H
 #define MIDDLEWARE_H
 
@@ -10,8 +9,8 @@ class Middleware {
 public:
     Middleware(const std::string& name, const std::string& ip, int port);
     bool connectToManager(const std::string& manager_ip, int manager_port);
-    void startListening();  // Adicione esta linha se não estiver presente
-    void activateStation(); // Adicione esta linha se não estiver presente
+    void startListening();
+    void activateStation();
     void connectToStation(const std::string& stationIP, int stationPort);
     void receiveMessage(const std::string& message);
     void sendMessage(const std::string& message, const std::string& destIP, int destPort);
@@ -28,6 +27,8 @@ private:
     std::string stationIP;
     int stationPort;
     int manager_socket;
+    std::string manager_ip;
+    int manager_port;
     std::map<int, bool> spots;  // Mapeamento de número da vaga para disponibilidade
     std::map<std::string, int> connectedStations;  // IP da estação conectada para sua porta
 };

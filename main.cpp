@@ -1,14 +1,15 @@
+#include <thread>  // Para usar std::thread
 #include "centralcontrol.h"
 #include "middleware.h"
 
 int main() {
-    // Inicializar o Middleware
-    Middleware middleware("Station1", "127.0.0.1", 8881);
+    // Inicializar o Middleware para as estações
+    Middleware middleware1("Station1", "127.0.0.1", 8881);
+    Middleware middleware2("Station2", "127.0.0.1", 8882);
 
-    // Conectar ao gerente (IP e porta fictícios)
-    if (middleware.connectToManager("127.0.0.1", 8880)) {
-       // middleware.activateStation();
-    }
+    // Criar threads para as estações
+    std::thread t1(&Middleware::startListening, &middleware1);
+    std::thread t2(&Middleware::startListening, &middleware2);
 
     // Central Control
     CentralControl MainControl;
@@ -16,6 +17,9 @@ int main() {
     MainControl.printParkingTickets();
     MainControl.readCommandFromFile("commands.txt");
 
+    // Esperar as threads terminarem // sdsd
+    t1.join();
+    t2.join();
+
     return 0;
 }
-
