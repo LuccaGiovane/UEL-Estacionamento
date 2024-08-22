@@ -8,4 +8,4 @@ foreach ($porta in $portas) {
 
 Write-Host "Portas fechadas com sucesso!"
 
-#colabora pycharm
+#colabora clion
