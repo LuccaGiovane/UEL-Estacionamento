@@ -24,7 +24,7 @@ void Middleware::startListening() {
     }
 
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    inet_pton(AF_INET, stationIP.c_str(), &address.sin_addr);
     address.sin_port = htons(stationPort);
 
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
@@ -42,8 +42,10 @@ void Middleware::startListening() {
     while (true) {
         if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
             std::cerr << "[LOG] Erro ao aceitar conexão" << std::endl;
-            exit(EXIT_FAILURE);
+            continue;
         }
+
+
 
         char buffer[1024] = {0};
         int valread = read(new_socket, buffer, 1024);

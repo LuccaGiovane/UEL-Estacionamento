@@ -2,10 +2,9 @@
 $portas = 8881..8890
 
 foreach ($porta in $portas) {
-    # Remove a regra de entrada para cada porta
-    Get-NetFirewallRule | Where-Object { $_.DisplayName -eq "Abrir Porta $porta" } | Remove-NetFirewallRule
+    # Remove as regras de entrada e saída para cada porta
+    Remove-NetFirewallRule -DisplayName "Abrir Porta $porta" -Direction Inbound -LocalPort $porta -Protocol TCP -Action Allow -Profile Any
+    Remove-NetFirewallRule -DisplayName "Abrir Porta $porta" -Direction Outbound -LocalPort $porta -Protocol TCP -Action Allow -Profile Any
 }
 
 Write-Host "Portas fechadas com sucesso!"
-
-#colabora clion

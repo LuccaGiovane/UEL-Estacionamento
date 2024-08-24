@@ -10,6 +10,7 @@ public:
     Station(std::string name, std::string ip, int port, char status);
 
 
+
     // Métodos Getters
     std::string getName() const { return name; }
     std::string getIpAddress() const;

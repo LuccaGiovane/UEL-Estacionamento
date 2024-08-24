@@ -24,10 +24,13 @@ $(TARGET): $(OBJS)
 
 # Regras para liberar as portas e executar o programa
 run: all
-	@echo "Liberando portas no Firewall..."
-	@powershell.exe -Command "Start-Process -NoNewWindow -Wait powershell.exe -ArgumentList '-Command \"& {$(foreach port,8881 8882 8883 8884 8885 8886 8887 8888 8889 8890, netsh advfirewall firewall add rule name=Port$(port) dir=in action=allow protocol=TCP localport=$(port); )}\"'"
-	@echo "Portas liberadas. Executando o programa..."
+	@echo "Abrindo portas no Firewall..."
+	@bash ./abrir_portas.sh
+	@echo "Portas abertas. Executando o programa..."
 	./$(TARGET)
+	@echo "Fechando portas no Firewall..."
+	@powershell.exe -Command "Start-Process -NoNewWindow -Wait powershell.exe -File fechar_portas.ps1"
+	@echo "Portas fechadas."
 
 # Regra para limpar os arquivos compilados
 clean:
