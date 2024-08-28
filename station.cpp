@@ -12,7 +12,7 @@ std::string Station::getIpAddress() const { return ip; }
 int Station::getPort() const { return port; }
 char Station::getStatus() const { return status; }
 
-// Simula a resposta da estação (exemplo simples)
+
 bool Station::ping() {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -44,3 +44,18 @@ void Station::addVaga(int vaga) { vagas.push_back(vaga); }
 
 // Limpa as vagas da estação (exemplo simplificado)
 void Station::clearVagas() { vagas.clear(); }
+
+// Define um novo conjunto de vagas
+void Station::setVagas(const std::vector<int>& novasVagas) {
+    vagas = novasVagas;
+}
+
+// Ativa a estação
+void Station::activate() {
+    status = 'A';
+}
+
+// Desativa a estação
+void Station::deactivate() {
+    status = 'I';
+}

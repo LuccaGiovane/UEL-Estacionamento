@@ -9,8 +9,6 @@ public:
     // Construtor
     Station(std::string name, std::string ip, int port, char status);
 
-
-
     // Métodos Getters
     std::string getName() const { return name; }
     std::string getIpAddress() const;
@@ -24,13 +22,17 @@ public:
     std::vector<int> getVagas() const;  // Obtém as vagas da estação
     void addVaga(int vaga);  // Adiciona uma vaga à estação
     void clearVagas();  // Limpa as vagas da estação
+    void setVagas(const std::vector<int>& vagas);  // Define um novo conjunto de vagas
+
+    void activate();  // Ativa a estação
+    void deactivate();  // Desativa a estação
 
 private:
     std::string name;
     std::string ip;
     int port;
-    char status;
-    std::vector<int> vagas;  // Exemplo de como armazenar vagas
+    char status;  // A = Ativo, I = Inativo
+    std::vector<int> vagas;  // Vagas controladas pela estação
 };
 
 #endif
