@@ -12,21 +12,20 @@ using namespace std;
 
 // Função para detectar falhas nas estações e redistribuir vagas
 void CentralControl::detectAndHandleFailure() {
-    for (auto &station : stations) {
+    for (Station& station : stations) {
         if (!isStationResponsive(station)) {
             std::cout << "[LOG] Detected failure at station: " << station.getName() << std::endl;
             redistributeVagas(station);
-            reconfigureTree();
         }
     }
 }
 
+
 // Função que verifica se a estação está respondendo
-bool CentralControl::isStationResponsive(Station &station) {
-    // Simulação: verifica se a estação responde em um tempo determinado (ping)
-    // Implementar a lógica de timeout real aqui
-    return station.ping();  // Exemplo, deve ser adaptado
+bool CentralControl::isStationResponsive(Station& station) {
+    return station.ping();  // Usa o método ping para verificar a conectividade
 }
+
 
 // Função para redistribuir as vagas da estação falhada
 void CentralControl::redistributeVagas(Station &failedStation) {
