@@ -24,13 +24,16 @@ public:
     int getPort(int ind);
     char getStatus(int ind);
 
-    // Novas funções para tolerância a falhas
-    void detectAndHandleFailure();  // Detecta falhas e lida com redistribuição de vagas
-    bool isStationResponsive(Station &station);  // Verifica se a estação está respondendo
-    void redistributeVagas(Station &failedStation);  // Redistribui vagas da estação falhada
-    Station* electNewStation();  // Escolhe nova estação para receber vagas
-    void transferVagas(Station &from, Station *to);  // Transfere vagas de uma estação para outra
-    void reconfigureTree();  // Reconfigura a árvore de encaminhamento
+    // Funções para tolerância a falhas
+    void detectAndHandleFailure();
+    bool isStationResponsive(Station& station);
+    void redistributeVagas(Station& failedStation);
+    Station* electNewStation();
+    void transferVagas(Station& from, Station* to);
+    void reconfigureTree();
+
+    // Nova função para gerar IDs dos carros
+    std::string setCarID(int length); // Gera um ID único para cada carro
 
 private:
     std::vector<std::thread> newThread;
@@ -41,8 +44,11 @@ private:
     std::array<int, 10> port;
     std::array<char, 10> status;
 
-    // Outros membros privados necessários para a lógica de falhas
-    std::vector<Station> stations;  // Lista de estações gerenciadas
+    // Outros membros para tolerância a falhas
+    std::vector<Station> stations;
+
+    // Adicionado o alfabeto para geração de IDs
+    const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 };
 
 #endif

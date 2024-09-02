@@ -3,14 +3,12 @@
 #include <thread>
 #include <random>
 #include <chrono>
-#include <iostream>
 #include <vector>
-#include <climits>  // Para usar INT_MAX
+#include <climits>
 #include "centralcontrol.h"
 
 using namespace std;
 
-// Função para detectar falhas nas estações e redistribuir vagas
 void CentralControl::detectAndHandleFailure() {
     for (Station& station : stations) {
         if (!isStationResponsive(station)) {
@@ -20,17 +18,12 @@ void CentralControl::detectAndHandleFailure() {
     }
 }
 
-
-// Função que verifica se a estação está respondendo
 bool CentralControl::isStationResponsive(Station& station) {
-    return station.ping();  // Usa o método ping para verificar a conectividade
+    return station.ping();
 }
 
-
-// Função para redistribuir as vagas da estação falhada
-void CentralControl::redistributeVagas(Station &failedStation) {
-    // Escolhe uma nova estação para receber as vagas
-    Station *newStation = electNewStation();
+void CentralControl::redistributeVagas(Station& failedStation) {
+    Station* newStation = electNewStation();
     if (newStation != nullptr) {
         std::cout << "[LOG] Redistributing vagas from " << failedStation.getName() << " to " << newStation->getName() << std::endl;
         transferVagas(failedStation, newStation);
@@ -39,12 +32,10 @@ void CentralControl::redistributeVagas(Station &failedStation) {
     }
 }
 
-// Função que escolhe a nova estação para assumir as vagas
 Station* CentralControl::electNewStation() {
-    // Lógica de eleição: retorna a estação com menos vagas ocupadas
-    Station *selectedStation = nullptr;
+    Station* selectedStation = nullptr;
     int minVagas = INT_MAX;
-    for (auto &station : stations) {
+    for (auto& station : stations) {
         if (station.isActive() && station.getOcupiedVagas() < minVagas) {
             selectedStation = &station;
             minVagas = station.getOcupiedVagas();
@@ -53,22 +44,16 @@ Station* CentralControl::electNewStation() {
     return selectedStation;
 }
 
-// Função que transfere as vagas da estação falhada para a nova estação
-void CentralControl::transferVagas(Station &from, Station *to) {
-    // Transfere as vagas da estação falhada para a nova estação
+void CentralControl::transferVagas(Station& from, Station* to) {
     for (int vaga : from.getVagas()) {
         to->addVaga(vaga);
     }
-    from.clearVagas();  // Limpa as vagas da estação falhada
+    from.clearVagas();
 }
 
-// Função para reconfigurar a árvore de encaminhamento após uma falha
 void CentralControl::reconfigureTree() {
-    // Atualiza a árvore de encaminhamento, removendo a estação falhada e redistribuindo as conexões
-    // Implementar a lógica de reconfiguração da árvore
     std::cout << "[LOG] Tree reconfigured after station failure." << std::endl;
 }
-
 
 void CentralControl::readCommandFromFile(string cmdFile) {
     string command;
@@ -95,15 +80,16 @@ void CentralControl::handleCommand(string cmd, string dest_IP, int dest_Port) {
     std::cout << "[LOG] Handling command: " << cmd << " for station IP: " << dest_IP << " Port: " << dest_Port << std::endl;
     if (cmd == "RV") {
         carNumber++;
-        std::cout << "[LOG] Starting the car: " << carNumber << std::endl;
+        std::string carID = setCarID(6);  // Gera um ID único para o carro
+        std::cout << "[LOG] Starting the car: " << carID << std::endl;
         string exit_name;
         string exit_ipaddr;
         int exit_port;
         selectExit(exit_name, exit_ipaddr, &exit_port);
         std::cout << "[LOG] Exit selected: " << exit_name << " IP: " << exit_ipaddr << " Port: " << exit_port << std::endl;
-        newThread.emplace_back(&Car::carThread, this, dest_IP, dest_Port, exit_ipaddr, exit_port);
+        newThread.emplace_back(&Car::carThread, this, dest_IP, dest_Port, exit_ipaddr, exit_port, carID);
 
-    } else if ((cmd == "AE") || (cmd == "FE") || (cmd == "VD") || (cmd =="ST")) {
+    } else if ((cmd == "AE") || (cmd == "FE") || (cmd == "VD") || (cmd == "ST")) {
         actNumber++;
         response = Communication::actFunction(dest_IP, dest_Port, cmd);
         std::cout << "[LOG] Response from command " << cmd << ": " << response << std::endl;
@@ -129,7 +115,6 @@ void CentralControl::selectExit(string& station, string& addr, int* p) {
     *p = port[ind];
     std::cout << "[LOG] Selected exit: " << station << " IP: " << addr << " Port: " << *p << std::endl;
 }
-
 
 CentralControl::CentralControl() {
     actNumber = 0;
@@ -174,4 +159,12 @@ int CentralControl::getPort(int ind) {
 
 char CentralControl::getStatus(int ind) {
     return status[ind - 1];
+}
+
+// Função para gerar IDs únicos de carros
+string CentralControl::setCarID(int length) {
+    string res = "";
+    for (int i = 0; i < length; i++)
+        res += alphabet[rand() % 36];
+    return res;
 }
