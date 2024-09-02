@@ -4,16 +4,15 @@
 #include <random>      // For random number generation
 #include <chrono>      // For time functions
 #include "car.h"
-//#include "base.h"
-//using namespace std;
+
 using namespace std;
 
-Car::Car(){
-    outResultFile.open ("output.txt");
+Car::Car() {
+    outResultFile.open("output.txt");
 }
 
-Car::~Car(){
-    outResultFile.close ();
+Car::~Car() {
+    outResultFile.close();
 }
 
 void Car::carThread(string dest_IP, int dest_Port, string exit_IP, int exit_Port) {
@@ -29,8 +28,9 @@ void Car::carThread(string dest_IP, int dest_Port, string exit_IP, int exit_Port
     std::cout << "[LOG] Car waiting for: " << sleepTime << " microseconds." << std::endl;
     std::this_thread::sleep_for(std::chrono::microseconds(sleepTime));
 
-    std::cout << "[LOG] Sending LV to exit IP: " << exit_IP << " Port: " << exit_Port << std::endl;
-    Communication::sendMessage(exit_IP, exit_Port, "LV");
+    // Alteração: o carro vai sair pela mesma estação que entrou
+    std::cout << "[LOG] Sending LV to the same station (IP: " << dest_IP << ", Port: " << dest_Port << ")" << std::endl;
+    Communication::sendMessage(dest_IP, dest_Port, "LV");  // Usando a estação de entrada como saída
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -39,8 +39,6 @@ void Car::carThread(string dest_IP, int dest_Port, string exit_IP, int exit_Port
     writeToFile(std::to_string(elapsedTime));
 }
 
-
-void Car::writeToFile(string text){
+void Car::writeToFile(string text) {
     outResultFile << text << "\n";
 }
-
