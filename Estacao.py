@@ -1,7 +1,5 @@
 import socket
 import threading
-import tkinter as tk
-from tkinter import messagebox
 
 class Estacao:
     max_vagas = 10
@@ -11,34 +9,28 @@ class Estacao:
         self.monitorIp = "127.0.0.1"
         self.monitorPort = 8000
         self.valor_predefinido_vagas = 10
-        self.vagas = [False] * Estacao.max_vagas # Exemplo: 10 vagas, False indica vaga livre
+        self.vagas = [False] * Estacao.max_vagas
         self.vagas_totais = 0
         self.vagas_livres = 0
         self.vizinhas_ativas = 0
         self.ativa = False  # Estado inicial dormente
         self.portas_vizinhas = portas_vizinhas  # Portas das estações vizinhas
-        self.status_vizinhas = {porta: "Inativa" for porta in portas_vizinhas}  # Status das estações vizinhas
+        self.status_vizinhas = {porta: "Inativa" for porta in portas_vizinhas}
 
-    
-        
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((self.ip, self.port))
         self.server_socket.listen(5)
-        
-        # Inicia o servidor em uma thread separada
-        threading.Thread(target=self.run_server, daemon=True).start()
 
+        threading.Thread(target=self.run_server, daemon=True).start()
         threading.Thread(target=self.pingar_estacoes_vizinhas, daemon=True).start()
         threading.Thread(target=self.enviar_status_para_monitor, daemon=True).start()
-        
-        # Inicia a interface gráfica
-        self.init_gui()
+
+        self.exibir_status_console()
 
     def run_server(self):
         while True:
             client_socket, addr = self.server_socket.accept()
             threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
-    
 
     def handle_client(self, client_socket):
         try:
@@ -46,12 +38,10 @@ class Estacao:
                 data = client_socket.recv(1024).decode()
                 if not data:
                     break
-                # Processa comandos
-                if data == "STATUS":  # Responde ao ping de status
+                if data == "STATUS":
                     if self.ativa:
                         total_vagas = len(self.vagas)
                         vagas_livres = self.vagas.count(False)
-
                         resposta = f"ATIVA, {total_vagas}, {vagas_livres}"
                         client_socket.send(resposta.encode())
                     else:
@@ -60,15 +50,15 @@ class Estacao:
                     _, vagas_totais = data.split(", ")
                     self.vagas_totais = int(vagas_totais)
                     self.vagas_livres = self.vagas_totais - sum(1 for vaga in self.vagas if vaga)
-                    self.update_gui()
-                elif self.ativa:  # Processa comandos apenas se a estação estiver ativa
-                    print(f"Mensagem recebida: {data}")
+                    self.exibir_status_console()
+                elif self.ativa:
                     if data == "RV":  # Requisição de Vaga
                         self.processar_requisicao_vaga(client_socket)
                 elif data == "AE":
                     self.ativar_estacao()
         finally:
             client_socket.close()
+
     def enviar_status_para_monitor(self):
         while True:
             try:
@@ -78,19 +68,18 @@ class Estacao:
                     sock.sendall(mensagem.encode())
             except (ConnectionRefusedError, socket.timeout, socket.error):
                 pass
-            threading.Event().wait(5)  # Envia status a cada 10 segundos
+            threading.Event().wait(5)
+
     def processar_requisicao_vaga(self, client_socket):
         vaga_alocada = False
         for i in range(len(self.vagas)):
             if not self.vagas[i]:
                 self.vagas[i] = True
                 vaga_alocada = True
-                self.update_gui()
-                # Envia uma resposta ao cliente confirmando a alocação da vaga
+                self.exibir_status_console()
                 client_socket.send(f"Vaga {i+1} alocada".encode())
                 break
         if not vaga_alocada:
-            # Se nenhuma vaga está disponível, envia uma resposta ao cliente
             client_socket.send("Sem vagas disponíveis".encode())
 
     def pingar_estacoes_vizinhas(self):
@@ -103,13 +92,11 @@ class Estacao:
                     self.vizinhas_ativas += 1
                 else:
                     self.status_vizinhas[porta] = ("Inativa", "N/A", "N/A")
-            # Atualiza a interface após cada ciclo de ping
-            self.root.after(0, self.update_gui)
+            self.exibir_status_console()
             threading.Event().wait(2)
 
     def ping_estacao(self, porta):
         try:
-            # Tenta conectar à estação vizinha
             with socket.create_connection((self.ip, porta), timeout=5) as sock:
                 sock.sendall("STATUS".encode())
                 resposta = sock.recv(1024).decode()
@@ -123,14 +110,17 @@ class Estacao:
                 return ("Inativa", "N/A", "N/A")
         except (ConnectionRefusedError, socket.timeout, socket.error):
             return ("Inativa", "N/A", "N/A")
-            
-    def atualizar_vagas_estacao(self, porta, vagas_totais):
-        try:
-            with socket.create_connection((self.ip, porta), timeout=5) as sock:
-                mensagem = f"UPDATE_VAGAS, {vagas_totais}"
-                sock.sendall(mensagem.encode())
-        except (ConnectionRefusedError, socket.timeout, socket.error):
-            print(f"Falha ao atualizar a estação na porta {porta}")
+
+    def ativar_estacao(self):
+        self.ativa = not self.ativa
+        if self.ativa:
+            self.redistribuir_vagas()
+        else:
+            self.vagas_totais = 0
+            self.vagas_livres = 0
+        estado = "ativada" if self.ativa else "desativada"
+        print(f"Estação {estado}")
+        self.exibir_status_console()
 
     def redistribuir_vagas(self):
         estacoes_ativas = [porta for porta, (status, _, _) in self.status_vizinhas.items() if status == "Ativa"]
@@ -148,114 +138,30 @@ class Estacao:
                     vagas_resto -= 1
                 self.atualizar_vagas_estacao(porta, total_vagas)
 
-            # Atualizar as vagas na estação atual após a redistribuição
             self.vagas_totais = vagas_por_estacao + (1 if vagas_resto > 0 else 0)
             self.vagas_livres = self.vagas_totais - sum(1 for vaga in self.vagas if vaga)
-
         else:
             self.vagas_totais = self.valor_predefinido_vagas
             self.vagas_livres = self.valor_predefinido_vagas
 
-        self.update_gui()
+        self.exibir_status_console()
 
-    def alocar_vaga(self):
-        for i in range(len(self.vagas)):
-            if not self.vagas[i]:
-                self.vagas[i] = True
-                self.update_gui()
-                break
-    
-    def liberar_vaga(self):
-        for i in range(len(self.vagas)):
-            if self.vagas[i]:
-                self.vagas[i] = False
-                self.update_gui()
-                break
-    
-    def ativar_estacao(self):
-        self.ativa = not self.ativa
-        if self.ativa:
-            self.redistribuir_vagas()
+    def atualizar_vagas_estacao(self, porta, vagas_totais):
+        try:
+            with socket.create_connection((self.ip, porta), timeout=5) as sock:
+                mensagem = f"UPDATE_VAGAS, {vagas_totais}"
+                sock.sendall(mensagem.encode())
+        except (ConnectionRefusedError, socket.timeout, socket.error):
+            print(f"Falha ao atualizar a estação na porta {porta}")
 
-        else:
-            self.vagas_totais = 0
-            self.vagas_livres = 0
-      
-        estado = "ativada" if self.ativa else "desativada"
-        print(f"Estação {estado}")
-        
-        # Atualiza a interface
-        self.update_gui()
-
-    def eleicao_para_vagas(self):
-        estacoes_ativas = [estacao for estacao in todas_as_estacoes if estacao.ativa]
-        if not estacoes_ativas:
-            return
-        vagas_a_transferir = sum([estacao.vagas_totais for estacao in todas_as_estacoes if not estacao.ativa])
-        vagas_por_estacao = vagas_a_transferir // len(estacoes_ativas)
-
-        for estacao in estacoes_ativas:
-            estacao.vagas_totais += vagas_por_estacao
-            estacao.update_gui()
-    
-    def init_gui(self):
-        self.root = tk.Tk()
-        self.root.title(f"Estação de Estacionamento (Porta: {self.port})")
-
-        self.activate_button = tk.Button(self.root, text="Ativar Estação", command=self.ativar_estacao)
-        self.activate_button.pack()
-        
-
-        self.vagas_totais_label = tk.Label(self.root, text="Vagas Totais: {self.vagas_totais}")
-        self.vagas_totais_label.pack()
-        
-        
-
-        self.vagas_livres_label = tk.Label(self.root, text="Vagas Livres: {self.vagas_livres}")
-        self.vagas_livres_label.pack()
-
-        self.vizinhas_ativas_label = tk.Label(self.root, text="vizinhos ativos: {self.vizinhas_ativas}")
-        self.vizinhas_ativas_label.pack()
-
-        self.labels = []
-        for i in range(len(self.vagas)):
-            label = tk.Label(self.root, text=f"Vaga {i+1}: {'Livre' if not self.vagas[i] else 'Ocupada'}")
-            label.pack()
-            self.labels.append(label)
-
-        self.status_label = tk.Label(self.root, text="Status: Dormente")
-        self.status_label.pack()
-
-        self.vizinhas_label = tk.Label(self.root, text="Status das Estações Vizinhas:")
-        self.vizinhas_label.pack()
-
-        self.vizinhas_status_labels = {}
-        for porta in self.portas_vizinhas:
-            status_label = tk.Label(self.root, text=f"Estação na porta {porta}: Inativa")
-            status_label.pack()
-            self.vizinhas_status_labels[porta] = status_label
-
-
-
-        self.update_gui()
-
-        self.root.mainloop()
-    
-    def update_gui(self):
-        for i in range(len(self.vagas)):
-            self.labels[i].config(text=f"Vaga {i+1}: {'Livre' if not self.vagas[i] else 'Ocupada'}")
-        self.status_label.config(text=f"Status: {'Ativa' if self.ativa else 'Dormente'}")
-        self.activate_button.config(text="Desativar Estação" if self.ativa else "Ativar Estação")
-        
-        self.vagas_totais_label.config(text=f"Vagas Totais: {self.vagas_totais}")
-        self.vagas_livres_label.config(text=f"Vagas Livres: {self.vagas_livres}")
-
+    def exibir_status_console(self):
+        print(f"\nStatus da Estação (Porta: {self.port})")
+        print(f"Ativa: {self.ativa}")
+        print(f"Vagas Totais: {self.vagas_totais}")
+        print(f"Vagas Livres: {self.vagas_livres}")
+        print(f"Vizinhas Ativas: {self.vizinhas_ativas}")
         for port, status in self.status_vizinhas.items():
-            if status[0] == "Ativa":
-                status_info = f"Estação {port}: {status[0]}, VAGAS TOTAIS: {status[1]}, VAGAS LIVRES: {status[2]}"
-            else:
-                status_info = f"Estação {port}: {status[0]}"
-            self.vizinhas_status_labels[port].config(text=status_info)
+            print(f"Estação {port}: {status[0]}, Vagas Totais: {status[1]}, Vagas Livres: {status[2]}")
 
 if __name__ == "__main__":
     ip = "127.0.0.1"
