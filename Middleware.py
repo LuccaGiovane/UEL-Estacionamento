@@ -2,24 +2,28 @@ import socket
 import threading
 
 class Middleware:
+    total_vagas_global = 100  # O total de vagas do estacionamento
+
     def __init__(self, station_port, neighbors):
         self.station_ip = "127.0.0.1"
         self.station_port = station_port
         self.neighbors = neighbors
-        self.total_vagas = 10  # Cada estação tem 10 vagas fixas
-        self.vagas_controladas = [None] * self.total_vagas  # Inicializa todas as vagas como livres (None)
-        self.carros = {}  # Armazena os carros alocados em suas respectivas vagas
+        self.active_stations = {neighbor: False for neighbor in neighbors}
+        self.total_vagas = 0  # Inicialmente, a estação não controla vagas
+        self.vagas_controladas = []  # Lista para controlar as vagas alocadas a esta estação
+        self.carros = {}
 
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.bind((self.station_ip, self.station_port))
-            self.server_socket.listen(2)  # Limitar a 2 conexões simultâneas
+            self.server_socket.listen(2)
             print(f"Estação iniciada na porta {station_port}, aguardando conexões...")
         except socket.error as e:
             print(f"Erro ao iniciar o socket na porta {station_port}: {e}")
             return
 
         threading.Thread(target=self.run_server, daemon=True).start()
+        threading.Thread(target=self.pingar_estacoes_vizinhas, daemon=True).start()
 
     def run_server(self):
         while True:
@@ -31,7 +35,7 @@ class Middleware:
                     client_socket.close()
                     continue
 
-                client_socket.settimeout(5)  # Timeout para encerrar conexões inativas após 5 segundos
+                client_socket.settimeout(5)
                 threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
             except socket.error as e:
                 pass
@@ -55,21 +59,18 @@ class Middleware:
         parts = message.split(", ")
         code = parts[0]
 
-        if code == "RV":  # Requisitar vaga
+        if code == "RV":
             car_id = parts[1]
             return self.allocate_vaga(car_id)
-        elif code == "LV":  # Liberar vaga
+        elif code == "LV":
             car_id = parts[1]
             return self.release_vaga(car_id)
-        elif code == "AE":  # Ativar estação
+        elif code == "AE":
             return self.activate_station()
         elif code == "STATUS":
             return f"ATIVA, {self.total_vagas}, {self.get_vagas_livres()}"
-        elif code == "V":  # Mostrar vagas disponíveis
+        elif code == "V":
             return self.mostrar_vagas()
-        elif code == "CONSULTA_CARRO":  # Verificar se o carro está nesta estação
-            car_id = parts[1]
-            return self.consulta_carro(car_id)
 
     def mostrar_vagas(self):
         """Retorna o número total de vagas, vagas ocupadas e vagas livres na estação."""
@@ -99,32 +100,68 @@ class Middleware:
             response = f"Carro {car_id} liberou a vaga {vaga_index+1}"
             return response
         else:
-            # Se o carro não está nesta estação, consultar vizinhos
             for neighbor in self.neighbors:
                 resposta = self.consulta_carro_vizinha(car_id, neighbor)
                 if resposta == "ENCONTRADO":
                     return f"Carro {car_id} liberado na estação {neighbor}"
             return f"Carro {car_id} não foi encontrado."
 
-    def consulta_carro(self, car_id):
-        """Verifica se o carro está nesta estação."""
-        if car_id in self.carros:
-            return "ENCONTRADO"
-        return "NAO_ENCONTRADO"
-
-    def consulta_carro_vizinha(self, car_id, neighbor_port):
-        """Consulta uma estação vizinha para verificar se o carro está alocado lá."""
-        try:
-            with socket.create_connection((self.station_ip, neighbor_port), timeout=5) as sock:
-                mensagem = f"CONSULTA_CARRO, {car_id}"
-                sock.sendall(mensagem.encode())
-                resposta = sock.recv(1024).decode()
-                return resposta
-        except (ConnectionRefusedError, socket.timeout):
-            return "NAO_ENCONTRADO"
-
     def activate_station(self):
+        estacoes_ativas = self.pingar_estacoes_vizinhas()
+        estacoes_ativas.append(self.station_port)  # Adiciona a própria estação como ativa
+        self.redistribuir_vagas(estacoes_ativas)
+
         return "Estação ativada."
+
+    def redistribuir_vagas(self, estacoes_ativas):
+        """Redistribui as vagas entre todas as estações ativas."""
+        total_estacoes_ativas = len(estacoes_ativas)
+        vagas_por_estacao = Middleware.total_vagas_global // total_estacoes_ativas
+        restante = Middleware.total_vagas_global % total_estacoes_ativas
+
+        for i, estacao in enumerate(estacoes_ativas):
+            if estacao == self.station_port:
+                self.total_vagas = vagas_por_estacao + (1 if i < restante else 0)
+                self.vagas_controladas = [None] * self.total_vagas
+            else:
+                self.comunicar_vizinho_redistribuicao(estacao, vagas_por_estacao + (1 if i < restante else 0))
+
+    def comunicar_vizinho_redistribuicao(self, neighbor, vagas_redistribuidas):
+        """Envia uma mensagem para as estações vizinhas redistribuírem suas vagas."""
+        try:
+            with socket.create_connection((self.station_ip, neighbor), timeout=5) as sock:
+                mensagem = f"REDISTRIBUIR, {vagas_redistribuidas}"
+                sock.sendall(mensagem.encode())
+        except (ConnectionRefusedError, socket.timeout):
+            pass
+
+    def pingar_estacoes_vizinhas(self):
+        """Verifica regularmente quais estações vizinhas estão ativas e retorna as ativas."""
+        estacoes_ativas = []
+        for neighbor in self.neighbors:
+            resposta = self.ping_estacao(neighbor)
+            if resposta:
+                status, total_vagas, vagas_livres = resposta
+                if status == "ATIVA":
+                    estacoes_ativas.append(neighbor)
+        return estacoes_ativas
+
+    def ping_estacao(self, porta):
+        """Tenta conectar-se a uma estação vizinha e verifica seu status."""
+        try:
+            with socket.create_connection((self.station_ip, porta), timeout=5) as sock:
+                sock.sendall("STATUS".encode())
+                resposta = sock.recv(1024).decode()
+            if resposta.startswith("ATIVA"):
+                partes = resposta.split(", ")
+                status = partes[0]
+                total_vagas = partes[1]
+                vagas_livres = partes[2]
+                return (status, total_vagas, vagas_livres)
+            else:
+                return None
+        except (ConnectionRefusedError, socket.timeout, socket.error):
+            return None
 
     def get_vagas_livres(self):
         """Calcula o número de vagas livres."""
