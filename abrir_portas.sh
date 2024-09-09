@@ -1,16 +1,10 @@
 #!/bin/bash
 
-# Forçar o uso do iptables-legacy
-sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
-
-# Abrir portas 8881 até 8889
-for port in {8881..8889}
+# Abrir portas de 8880 até 8890 no firewall (Linux)
+for port in {8880..8890}
 do
-  sudo iptables -I INPUT -p tcp --dport $port -j ACCEPT
-  echo "Porta $port aberta."
+    echo "Abrindo porta $port no firewall..."
+    sudo ufw allow $port/tcp
 done
 
-# Salvar as regras para persistência após reinicialização
-sudo iptables-save | sudo tee /etc/iptables/rules.v4
-
-echo "Todas as portas entre 8881 e 8889 foram abertas com sucesso."
+echo "Portas de 8880 a 8890 abertas com sucesso."
