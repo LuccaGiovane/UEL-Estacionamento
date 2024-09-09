@@ -169,7 +169,7 @@ class Middleware:
 
 if __name__ == "__main__":
     try:
-        station_port = int(input("Digite a porta para esta estação: "))
+        station_port = int(input("Digite a porta para esta estação: "))  
     except ValueError:
         print("Erro: Por favor, digite um número válido para a porta.")
         exit(1)
