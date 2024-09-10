@@ -23,7 +23,6 @@ class Middleware:
             return
 
         threading.Thread(target=self.run_server, daemon=True).start()
-        threading.Thread(target=self.pingar_estacoes_vizinhas, daemon=True).start()
 
     def run_server(self):
         while True:
@@ -59,24 +58,25 @@ class Middleware:
         parts = message.split(", ")
         code = parts[0]
 
-        if code == "RV":
+        if code == "RV":  # Requisitar vaga
             car_id = parts[1]
             return self.allocate_vaga(car_id)
-        elif code == "LV":
+        elif code == "LV":  # Liberar vaga
             car_id = parts[1]
             return self.release_vaga(car_id)
-        elif code == "AE":
+        elif code == "AE":  # Ativar estação
+            print(f"Ativando estação {self.station_port}...")
             return self.activate_station()
         elif code == "STATUS":
             return f"ATIVA, {self.total_vagas}, {self.get_vagas_livres()}"
-        elif code == "V":
+        elif code == "V":  # Mostrar vagas disponíveis
             return self.mostrar_vagas()
 
     def mostrar_vagas(self):
-        """Retorna o número total de vagas, vagas ocupadas e vagas livres na estação."""
         vagas_ocupadas = len([vaga for vaga in self.vagas_controladas if vaga is not None])
         vagas_livres = self.get_vagas_livres()
         response = f"Estação {self.station_port}: Total de vagas: {self.total_vagas}, Ocupadas: {vagas_ocupadas}, Livres: {vagas_livres}"
+        print(f"Debug: Estação {self.station_port} tem {self.total_vagas} vagas.")
         return response
 
     def allocate_vaga(self, car_id):
@@ -108,35 +108,42 @@ class Middleware:
 
     def activate_station(self):
         estacoes_ativas = self.pingar_estacoes_vizinhas()
-        estacoes_ativas.append(self.station_port)  # Adiciona a própria estação como ativa
-        self.redistribuir_vagas(estacoes_ativas)
-
+        if len(estacoes_ativas) == 0:
+            # Primeira estação a ser ativada controla todas as vagas
+            self.total_vagas = Middleware.total_vagas_global
+            self.vagas_controladas = [None] * self.total_vagas
+            print(f"Estação {self.station_port} recebeu todas as {self.total_vagas} vagas.")
+        else:
+            # Redistribuir vagas
+            print(f"Redistribuindo vagas entre {len(estacoes_ativas)} estações ativas.")
+            self.redistribuir_vagas(estacoes_ativas)
         return "Estação ativada."
 
     def redistribuir_vagas(self, estacoes_ativas):
-        """Redistribui as vagas entre todas as estações ativas."""
-        total_estacoes_ativas = len(estacoes_ativas)
-        vagas_por_estacao = Middleware.total_vagas_global // total_estacoes_ativas
-        restante = Middleware.total_vagas_global % total_estacoes_ativas
+        """Redistribui as vagas corretamente."""
+        estacao_com_mais_vagas = max(estacoes_ativas, key=lambda estacao: self.get_vagas_estacao(estacao))
+        print(f"Estação com mais vagas: {estacao_com_mais_vagas}")
+        vagas_a_serem_doadas = self.get_vagas_estacao(estacao_com_mais_vagas) // 2
 
-        for i, estacao in enumerate(estacoes_ativas):
-            if estacao == self.station_port:
-                self.total_vagas = vagas_por_estacao + (1 if i < restante else 0)
-                self.vagas_controladas = [None] * self.total_vagas
-            else:
-                self.comunicar_vizinho_redistribuicao(estacao, vagas_por_estacao + (1 if i < restante else 0))
+        # Atualiza a estação que vai doar as vagas
+        self.atualizar_estacao_vagas(estacao_com_mais_vagas, vagas_a_serem_doadas)
 
-    def comunicar_vizinho_redistribuicao(self, neighbor, vagas_redistribuidas):
-        """Envia uma mensagem para as estações vizinhas redistribuírem suas vagas."""
+        # Atualiza a estação que está herdando as vagas
+        self.total_vagas = vagas_a_serem_doadas
+        self.vagas_controladas = [None] * self.total_vagas
+        print(f"Estação {self.station_port} recebeu {self.total_vagas} vagas.")
+
+    def atualizar_estacao_vagas(self, estacao, vagas_a_serem_doadas):
+        """Atualiza a quantidade de vagas da estação que doou as vagas."""
         try:
-            with socket.create_connection((self.station_ip, neighbor), timeout=5) as sock:
-                mensagem = f"REDISTRIBUIR, {vagas_redistribuidas}"
+            with socket.create_connection((self.station_ip, estacao), timeout=5) as sock:
+                mensagem = f"ATUALIZAR_VAGAS, {vagas_a_serem_doadas}"
                 sock.sendall(mensagem.encode())
+                print(f"Atualizando estação {estacao} para {vagas_a_serem_doadas} vagas doadas.")
         except (ConnectionRefusedError, socket.timeout):
             pass
 
     def pingar_estacoes_vizinhas(self):
-        """Verifica regularmente quais estações vizinhas estão ativas e retorna as ativas."""
         estacoes_ativas = []
         for neighbor in self.neighbors:
             resposta = self.ping_estacao(neighbor)
@@ -147,7 +154,6 @@ class Middleware:
         return estacoes_ativas
 
     def ping_estacao(self, porta):
-        """Tenta conectar-se a uma estação vizinha e verifica seu status."""
         try:
             with socket.create_connection((self.station_ip, porta), timeout=5) as sock:
                 sock.sendall("STATUS".encode())
@@ -163,13 +169,26 @@ class Middleware:
         except (ConnectionRefusedError, socket.timeout, socket.error):
             return None
 
+    def get_vagas_estacao(self, estacao):
+        """Consulta a quantidade de vagas de uma estação vizinha."""
+        try:
+            with socket.create_connection((self.station_ip, estacao), timeout=5) as sock:
+                sock.sendall("STATUS".encode())
+                resposta = sock.recv(1024).decode()
+                if resposta.startswith("ATIVA"):
+                    partes = resposta.split(", ")
+                    return int(partes[1])  # Total de vagas
+        except (ConnectionRefusedError, socket.timeout, socket.error):
+            pass
+        return 0
+
     def get_vagas_livres(self):
         """Calcula o número de vagas livres."""
         return len([vaga for vaga in self.vagas_controladas if vaga is None])
 
 if __name__ == "__main__":
     try:
-        station_port = int(input("Digite a porta para esta estação: "))  
+        station_port = int(input("Digite a porta para esta estação: "))
     except ValueError:
         print("Erro: Por favor, digite um número válido para a porta.")
         exit(1)
