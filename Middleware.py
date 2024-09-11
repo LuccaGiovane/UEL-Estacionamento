@@ -1,6 +1,7 @@
 import socket
 import threading
 
+
 class Middleware:
     total_vagas_global = 100  # O total de vagas do estacionamento
 
@@ -71,6 +72,11 @@ class Middleware:
             return f"ATIVA, {self.total_vagas}, {self.get_vagas_livres()}"
         elif code == "V":  # Mostrar vagas disponíveis
             return self.mostrar_vagas()
+        elif code == "UPDATE_VAGAS":
+            vagas = int(parts[1])
+            self.total_vagas = vagas
+            self.vagas_controladas = [None] * vagas
+            print(f"Debug: Atualizando vagas da estação {self.station_port} para {self.total_vagas}.")
 
     def mostrar_vagas(self):
         vagas_ocupadas = len([vaga for vaga in self.vagas_controladas if vaga is not None])
@@ -87,7 +93,7 @@ class Middleware:
             if vaga is None:
                 self.vagas_controladas[i] = car_id
                 self.carros[car_id] = i
-                response = f"Vaga {i+1} alocada para carro {car_id}."
+                response = f"Vaga {i + 1} alocada para carro {car_id}."
                 return response
 
         return "Sem vagas disponíveis"
@@ -97,7 +103,7 @@ class Middleware:
             vaga_index = self.carros[car_id]
             self.vagas_controladas[vaga_index] = None
             del self.carros[car_id]
-            response = f"Carro {car_id} liberou a vaga {vaga_index+1}"
+            response = f"Carro {car_id} liberou a vaga {vaga_index + 1}"
             return response
         else:
             for neighbor in self.neighbors:
@@ -124,22 +130,24 @@ class Middleware:
         estacao_com_mais_vagas = max(estacoes_ativas, key=lambda estacao: self.get_vagas_estacao(estacao))
         print(f"Estação com mais vagas: {estacao_com_mais_vagas}")
         vagas_a_serem_doadas = self.get_vagas_estacao(estacao_com_mais_vagas) // 2
+        print(f"Vagas a serem doadas pela estação {estacao_com_mais_vagas}: {vagas_a_serem_doadas}")
 
         # Atualiza a estação que vai doar as vagas
-        self.atualizar_estacao_vagas(estacao_com_mais_vagas, vagas_a_serem_doadas)
+        self.update_vagas(estacao_com_mais_vagas, vagas_a_serem_doadas)
 
         # Atualiza a estação que está herdando as vagas
         self.total_vagas = vagas_a_serem_doadas
         self.vagas_controladas = [None] * self.total_vagas
         print(f"Estação {self.station_port} recebeu {self.total_vagas} vagas.")
 
-    def atualizar_estacao_vagas(self, estacao, vagas_a_serem_doadas):
+    def update_vagas(self, estacao, vagas_restantes):
         """Atualiza a quantidade de vagas da estação que doou as vagas."""
         try:
+            # Envia uma mensagem para a estação doadora com o número de vagas restantes
             with socket.create_connection((self.station_ip, estacao), timeout=5) as sock:
-                mensagem = f"ATUALIZAR_VAGAS, {vagas_a_serem_doadas}"
+                mensagem = f"UPDATE_VAGAS, {vagas_restantes}"
                 sock.sendall(mensagem.encode())
-                print(f"Atualizando estação {estacao} para {vagas_a_serem_doadas} vagas doadas.")
+                print(f"Atualizando a estação {estacao} para {vagas_restantes} vagas restantes.")
         except (ConnectionRefusedError, socket.timeout):
             pass
 
@@ -185,6 +193,7 @@ class Middleware:
     def get_vagas_livres(self):
         """Calcula o número de vagas livres."""
         return len([vaga for vaga in self.vagas_controladas if vaga is None])
+
 
 if __name__ == "__main__":
     try:
