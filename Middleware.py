@@ -94,9 +94,16 @@ class Middleware:
             print(f"Estação {self.station_number} agora tem {self.total_vagas} vagas.")
         elif code == "ALLOCATE_CAR":
             car_id = parts[1]
-            response = self.allocate_vaga(car_id)
+            response = self.allocate_vaga(car_id, force=True)
             print(f"Carro {car_id} transferido para estação {self.station_number}.")
             return response
+        elif code == "ALLOCATE_CARS":
+            carros_str = parts[1]
+            carros = carros_str.split(";")
+            for car_id in carros:
+                self.allocate_vaga(car_id, force=True)
+            print(f"Carros {carros} transferidos para estação {self.station_number}.")
+            return "Carros alocados."
         elif code == "CHECK_CAR":
             car_id = parts[1]
             if car_id in self.carros:
@@ -111,10 +118,31 @@ class Middleware:
             return "PONG"
         elif code == "STATION_DOWN":
             estacao_desligada = int(parts[1])
+            carros_estacao_falha = []
+            if len(parts) > 2:
+                carros_str = parts[2]
+                if carros_str:
+                    carros_estacao_falha = carros_str.split(";")
             print(f"Estação {estacao_desligada} desligou. Iniciando eleição para redistribuição de vagas.")
             if estacao_desligada not in self.processed_failed_stations:
                 self.processed_failed_stations.add(estacao_desligada)
-                self.eleicao_estacao_falha(estacao_desligada)
+                # Remover a estação falha antes de criar estacoes_ativas
+                if estacao_desligada in self.active_stations:
+                    del self.active_stations[estacao_desligada]
+
+                estacoes_ativas = list(self.active_stations.keys())
+                estacoes_ativas.append(self.station_number)
+                coordenador = min(estacoes_ativas)
+                if self.station_number == coordenador:
+                    # Apenas o coordenador processa a redistribuição
+                    self.eleicao_estacao_falha(estacao_desligada, carros_estacao_falha)
+                else:
+                    # Outras estações apenas atualizam suas vagas
+                    self.redistribuir_vagas(estacoes_ativas)
+        elif code == "GET_CARROS":
+            carros_list = list(self.carros.keys())
+            response = ", ".join(carros_list)
+            return response
         else:
             return "Comando desconhecido"
 
@@ -125,8 +153,8 @@ class Middleware:
         print(f"Debug: Estação {self.station_number} tem {self.total_vagas} vagas.")
         return response
 
-    def allocate_vaga(self, car_id):
-        if car_id in self.carros:
+    def allocate_vaga(self, car_id, force=False):
+        if not force and car_id in self.carros:
             return f"Carro {car_id} já está alocado em uma vaga."
 
         for i, vaga in enumerate(self.vagas_controladas):
@@ -182,7 +210,11 @@ class Middleware:
             if estacao == self.station_number:
                 # Atualiza a estação atual
                 self.total_vagas = vagas
-                self.vagas_controladas = [None] * self.total_vagas
+                # Ajusta vagas_controladas mantendo os carros alocados
+                occupied_vagas = [vaga for vaga in self.vagas_controladas if vaga is not None]
+                self.vagas_controladas = occupied_vagas + [None] * (self.total_vagas - len(occupied_vagas))
+                # Atualiza self.carros
+                self.carros = {car_id: idx for idx, car_id in enumerate(self.vagas_controladas) if car_id is not None}
                 print(f"Estação {self.station_number} recebeu {self.total_vagas} vagas.")
             else:
                 # Atualiza a estação remota
@@ -270,15 +302,26 @@ class Middleware:
                     if estacao_falha not in self.processed_failed_stations:
                         print(f"Estação {estacao_falha} falhou. Iniciando eleição para redistribuição de vagas.")
                         self.processed_failed_stations.add(estacao_falha)
-                        self.eleicao_estacao_falha(estacao_falha)
+                        # Remover a estação falha antes de criar estacoes_ativas
+                        if estacao_falha in self.active_stations:
+                            del self.active_stations[estacao_falha]
 
-    def eleicao_estacao_falha(self, estacao_falha):
+                        estacoes_ativas = list(self.active_stations.keys())
+                        estacoes_ativas.append(self.station_number)
+                        coordenador = min(estacoes_ativas)
+                        if self.station_number == coordenador:
+                            # Coordenador processa a redistribuição
+                            self.eleicao_estacao_falha(estacao_falha, [])
+                        else:
+                            # Outras estações apenas atualizam suas vagas
+                            self.redistribuir_vagas(estacoes_ativas)
+
+    def eleicao_estacao_falha(self, estacao_falha, carros_estacao_falha):
         """Realiza a eleição para redistribuir as vagas da estação falha."""
+        print(f"Carros na estação {estacao_falha}: {carros_estacao_falha}")
+
         # Remove a estação falha das estações ativas
-        if estacao_falha in self.active_stations:
-            del self.active_stations[estacao_falha]
-        else:
-            return
+        # Já foi removida antes de chamar este método
 
         # Obter a lista atualizada de estações ativas (incluindo self)
         estacoes_ativas = list(self.active_stations.keys())
@@ -286,22 +329,62 @@ class Middleware:
 
         self.redistribuir_vagas(estacoes_ativas)
 
+        # Apenas o coordenador redistribui os carros
+        self.redistribuir_carros(carros_estacao_falha, estacoes_ativas)
+
+    def redistribuir_carros(self, carros, estacoes_ativas):
+        """Redistribui os carros para uma única estação ativa."""
+        if not carros:
+            return
+
+        # Escolhe uma estação para receber todos os carros (por exemplo, a de menor número)
+        estacao_destino = min(estacoes_ativas)
+
+        if estacao_destino == self.station_number:
+            # A estação atual é a escolhida
+            for car_id in carros:
+                response = self.allocate_vaga(car_id, force=True)
+                if response != "Sem vagas disponíveis":
+                    print(f"Carro {car_id} realocado para estação {self.station_number}.")
+                else:
+                    print(f"Não foi possível realocar o carro {car_id} na estação {self.station_number}.")
+        else:
+            # Envia todos os carros para a estação destino
+            self.alocar_carros_vizinha(carros, estacao_destino)
+
+    def alocar_carros_vizinha(self, carros, estacao):
+        estacao_port = 8880 + (estacao - 1)
+        carros_str = ";".join(carros)
+        try:
+            with socket.create_connection((self.station_ip, estacao_port), timeout=5) as sock:
+                mensagem = f"ALLOCATE_CARS, {carros_str}"
+                sock.sendall(mensagem.encode())
+                resposta = sock.recv(1024).decode()
+                if "Carros alocados" in resposta:
+                    print(f"Carros {carros} realocados para estação {estacao}.")
+                else:
+                    print(f"Não foi possível realocar os carros {carros} na estação {estacao}.")
+        except (ConnectionRefusedError, socket.timeout, socket.error):
+            print(f"Erro ao conectar com a estação {estacao} para realocar carros.")
+
     def desligar_estacao(self):
         """Desliga a estação."""
-        self.is_active = False
-        self.running = False
         # Informa as outras estações sobre o desligamento
         self.informar_desligamento()
+        self.is_active = False
+        self.running = False
         self.server_socket.close()
         print(f"Estação {self.station_number} foi desligada.")
 
     def informar_desligamento(self):
         """Informa as estações vizinhas sobre o desligamento."""
+        carros_list = list(self.carros.keys())
+        carros_str = ";".join(carros_list)
         for neighbor in self.neighbors:
             neighbor_port = self.neighbor_ports[neighbor]
             try:
                 with socket.create_connection((self.station_ip, neighbor_port), timeout=1) as sock:
-                    mensagem = f"STATION_DOWN, {self.station_number}"
+                    mensagem = f"STATION_DOWN, {self.station_number}, {carros_str}"
                     sock.sendall(mensagem.encode())
             except (ConnectionRefusedError, socket.timeout, socket.error):
                 pass
@@ -329,3 +412,4 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         print("Encerrando middleware...")
+        middleware.desligar_estacao()
