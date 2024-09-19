@@ -7,15 +7,16 @@ class Middleware:
     total_vagas_global = 100  # O total de vagas do estacionamento
 
     def __init__(self, station_number, neighbors):
+        '''Inicializa a instância da classe Middleware com o número da estação e seus vizinhos.'''
         self.station_number = station_number
-        self.station_port = 8880 + (station_number - 1)
-        self.station_ip = "127.0.0.1"
-        self.neighbors = neighbors
-        self.neighbor_ports = {neighbor: 8880 + (neighbor - 1) for neighbor in neighbors}
-        self.active_stations = {}
+        self.station_port = 8880 + (station_number - 1)  # Define a porta da estação com base no número
+        self.station_ip = "127.0.0.1"  # IP local
+        self.neighbors = neighbors  # Lista de estações vizinhas
+        self.neighbor_ports = {neighbor: 8880 + (neighbor - 1) for neighbor in neighbors}  # Portas das estações vizinhas
+        self.active_stations = {}  # Dicionário para armazenar estações ativas
         self.total_vagas = 0  # Inicialmente, a estação não controla vagas
         self.vagas_controladas = []  # Lista para controlar as vagas alocadas a esta estação
-        self.carros = {}
+        self.carros = {}  # Dicionário para mapear carros às vagas
         self.is_active = False  # Estado inicial da estação (inativa)
         self.running = True  # Controla se a estação está rodando
         self.processed_failed_stations = set()  # Para evitar processar falhas múltiplas vezes
@@ -23,16 +24,19 @@ class Middleware:
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.bind((self.station_ip, self.station_port))
-            self.server_socket.listen(5)
+            self.server_socket.listen(5)  # Define a fila de conexões
             print(f"Estação {self.station_number} iniciada na porta {self.station_port}, aguardando conexões...")
         except socket.error as e:
             print(f"Erro ao iniciar o socket na porta {self.station_port}: {e}")
             return
 
+        # Inicia a thread do servidor
         threading.Thread(target=self.run_server, daemon=True).start()
+        # Inicia a thread para monitorar as estações
         threading.Thread(target=self.monitor_stations, daemon=True).start()
 
     def run_server(self):
+        '''Executa o servidor que aceita conexões de clientes e trata cada conexão em uma nova thread.'''
         while self.running:
             try:
                 client_socket, addr = self.server_socket.accept()
@@ -42,12 +46,13 @@ class Middleware:
                     client_socket.close()
                     continue
 
-                client_socket.settimeout(5)
+                client_socket.settimeout(5)  # Define timeout para a conexão
                 threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
             except socket.error as e:
-                pass
+                pass  # Ignora erros de socket temporários
 
     def handle_client(self, client_socket):
+        '''Lida com a comunicação com um cliente conectado, processando mensagens recebidas.'''
         try:
             while self.running:
                 try:
@@ -58,11 +63,12 @@ class Middleware:
                     if response:
                         client_socket.send(response.encode())
                 except socket.timeout:
-                    break
+                    break  # Sai do loop se o socket der timeout
         finally:
-            client_socket.close()
+            client_socket.close()  # Fecha a conexão com o cliente
 
     def process_message(self, message):
+        '''Processa uma mensagem recebida e executa a ação correspondente.'''
         parts = message.strip().split(", ")
         code = parts[0]
 
@@ -147,6 +153,7 @@ class Middleware:
             return "Comando desconhecido"
 
     def mostrar_vagas(self):
+        '''Exibe o número total de vagas, vagas ocupadas e vagas livres da estação.'''
         vagas_ocupadas = len([vaga for vaga in self.vagas_controladas if vaga is not None])
         vagas_livres = self.get_vagas_livres()
         response = f"Estação {self.station_number}: Total de vagas: {self.total_vagas}, Ocupadas: {vagas_ocupadas}, Livres: {vagas_livres}"
@@ -154,6 +161,7 @@ class Middleware:
         return response
 
     def allocate_vaga(self, car_id, force=False):
+        '''Aloca uma vaga para um carro específico, podendo forçar a alocação se necessário.'''
         if not force and car_id in self.carros:
             return f"Carro {car_id} já está alocado em uma vaga."
 
@@ -167,6 +175,7 @@ class Middleware:
         return "Sem vagas disponíveis"
 
     def release_vaga(self, car_id):
+        '''Libera a vaga ocupada por um carro específico, verificando em vizinhos se necessário.'''
         if car_id in self.carros:
             vaga_index = self.carros[car_id]
             self.vagas_controladas[vaga_index] = None
@@ -181,6 +190,7 @@ class Middleware:
             return f"Carro {car_id} não foi encontrado."
 
     def activate_station(self):
+        '''Ativa a estação, pinge as estações vizinhas e redistribui as vagas entre as ativas.'''
         self.is_active = True  # Marca a estação como ativa
         estacoes_ativas = self.pingar_estacoes_vizinhas()
         estacoes_ativas.append(self.station_number)
@@ -188,7 +198,7 @@ class Middleware:
         return "Estação ativada."
 
     def redistribuir_vagas(self, estacoes_ativas):
-        """Redistribui as vagas corretamente entre as estações ativas."""
+        '''Redistribui as vagas corretamente entre as estações ativas.'''
         total_estacoes = len(estacoes_ativas)
         vagas_por_estacao = Middleware.total_vagas_global // total_estacoes
         vagas_restantes = Middleware.total_vagas_global % total_estacoes
@@ -221,7 +231,7 @@ class Middleware:
                 self.update_vagas(estacao, vagas)
 
     def update_vagas(self, estacao, vagas_novas):
-        """Atualiza a quantidade de vagas da estação."""
+        '''Atualiza a quantidade de vagas da estação especificada.'''
         estacao_port = 8880 + (estacao - 1)
         try:
             with socket.create_connection((self.station_ip, estacao_port), timeout=1) as sock:
@@ -229,9 +239,10 @@ class Middleware:
                 sock.sendall(mensagem.encode())
                 print(f"Atualizando a estação {estacao} para {vagas_novas} vagas.")
         except (ConnectionRefusedError, socket.timeout, socket.error):
-            pass
+            pass  # Ignora erros de conexão
 
     def pingar_estacoes_vizinhas(self):
+        '''Pinge as estações vizinhas para verificar quais estão ativas.'''
         estacoes_ativas = []
         for neighbor in self.neighbors:
             neighbor_port = self.neighbor_ports[neighbor]
@@ -250,6 +261,7 @@ class Middleware:
         return estacoes_ativas
 
     def ping_estacao(self, porta):
+        '''Envia uma mensagem de status para uma estação específica e retorna sua resposta.'''
         try:
             with socket.create_connection((self.station_ip, porta), timeout=1) as sock:
                 sock.sendall("STATUS".encode())
@@ -267,18 +279,18 @@ class Middleware:
             return None
 
     def get_vagas_livres_estacao(self, estacao):
-        """Consulta o número de vagas livres de uma estação vizinha."""
+        '''Consulta o número de vagas livres de uma estação vizinha.'''
         if estacao in self.active_stations:
             return self.active_stations[estacao]['vagas_livres']
         else:
             return 0
 
     def get_vagas_livres(self):
-        """Calcula o número de vagas livres."""
+        '''Calcula o número de vagas livres na estação atual.'''
         return len([vaga for vaga in self.vagas_controladas if vaga is None])
 
     def consulta_carro_vizinha(self, car_id, estacao):
-        """Consulta se um carro está estacionado em uma estação vizinha."""
+        '''Consulta se um carro está estacionado em uma estação vizinha.'''
         estacao_port = 8880 + (estacao - 1)
         try:
             with socket.create_connection((self.station_ip, estacao_port), timeout=1) as sock:
@@ -291,9 +303,9 @@ class Middleware:
         return "NAO_ENCONTRADO"
 
     def monitor_stations(self):
-        """Monitora as estações vizinhas periodicamente."""
+        '''Monitora as estações vizinhas periodicamente para detectar falhas e redistribuir vagas.'''
         while self.running:
-            time.sleep(5)
+            time.sleep(5)  # Intervalo de monitoramento
             estacoes_ativas_anteriores = set(self.active_stations.keys())
             estacoes_ativas = self.pingar_estacoes_vizinhas()
             estacoes_falhas = estacoes_ativas_anteriores - set(estacoes_ativas)
@@ -317,7 +329,7 @@ class Middleware:
                             self.redistribuir_vagas(estacoes_ativas)
 
     def eleicao_estacao_falha(self, estacao_falha, carros_estacao_falha):
-        """Realiza a eleição para redistribuir as vagas da estação falha."""
+        '''Realiza a eleição para redistribuir as vagas da estação falha.'''
         print(f"Carros na estação {estacao_falha}: {carros_estacao_falha}")
 
         # Remove a estação falha das estações ativas
@@ -333,7 +345,7 @@ class Middleware:
         self.redistribuir_carros(carros_estacao_falha, estacoes_ativas)
 
     def redistribuir_carros(self, carros, estacoes_ativas):
-        """Redistribui os carros para uma única estação ativa."""
+        '''Redistribui os carros para uma única estação ativa.'''
         if not carros:
             return
 
@@ -353,6 +365,7 @@ class Middleware:
             self.alocar_carros_vizinha(carros, estacao_destino)
 
     def alocar_carros_vizinha(self, carros, estacao):
+        '''Aloca carros em uma estação vizinha especificada.'''
         estacao_port = 8880 + (estacao - 1)
         carros_str = ";".join(carros)
         try:
@@ -368,7 +381,7 @@ class Middleware:
             print(f"Erro ao conectar com a estação {estacao} para realocar carros.")
 
     def desligar_estacao(self):
-        """Desliga a estação."""
+        '''Desliga a estação, informando os vizinhos e fechando o socket.'''
         # Informa as outras estações sobre o desligamento
         self.informar_desligamento()
         self.is_active = False
@@ -377,7 +390,7 @@ class Middleware:
         print(f"Estação {self.station_number} foi desligada.")
 
     def informar_desligamento(self):
-        """Informa as estações vizinhas sobre o desligamento."""
+        '''Informa as estações vizinhas sobre o desligamento da estação atual.'''
         carros_list = list(self.carros.keys())
         carros_str = ";".join(carros_list)
         for neighbor in self.neighbors:
@@ -387,9 +400,10 @@ class Middleware:
                     mensagem = f"STATION_DOWN, {self.station_number}, {carros_str}"
                     sock.sendall(mensagem.encode())
             except (ConnectionRefusedError, socket.timeout, socket.error):
-                pass
+                pass  # Ignora erros de conexão
 
     def __del__(self):
+        '''Desliga a estação ao deletar a instância, se ainda estiver rodando.'''
         if self.running:
             self.desligar_estacao()
 
