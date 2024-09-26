@@ -1,6 +1,10 @@
+
 import socket
 import threading
 import time
+import argparse
+
+from collections import deque
 
 
 class Middleware:
@@ -11,6 +15,8 @@ class Middleware:
         self.station_number = station_number
         self.station_port = 8880 + (station_number - 1)  # Define a porta da estação com base no número
         self.station_ip = "127.0.0.1"  # IP local
+        self.rv_queue = deque()
+        self.lv_queue = deque()
         self.neighbors = neighbors  # Lista de estações vizinhas
         self.neighbor_ports = {neighbor: 8880 + (neighbor - 1) for neighbor in neighbors}  # Portas das estações vizinhas
         self.active_stations = {}  # Dicionário para armazenar estações ativas
@@ -34,6 +40,8 @@ class Middleware:
         threading.Thread(target=self.run_server, daemon=True).start()
         # Inicia a thread para monitorar as estações
         threading.Thread(target=self.monitor_stations, daemon=True).start()
+        # Inicia a thread que processa as requisições de vaga
+        threading.Thread(target=self.processar_requisicoes_vaga, daemon=True).start()
 
     def run_server(self):
         '''Executa o servidor que aceita conexões de clientes e trata cada conexão em uma nova thread.'''
@@ -52,7 +60,7 @@ class Middleware:
                 pass  # Ignora erros de socket temporários
 
     def handle_client(self, client_socket):
-        '''Lida com a comunicação com um cliente conectado, processando mensagens recebidas.'''
+        """Lida com a comunicação com um cliente conectado, processando mensagens recebidas."""
         try:
             while self.running:
                 try:
@@ -67,14 +75,35 @@ class Middleware:
         finally:
             client_socket.close()  # Fecha a conexão com o cliente
 
+    def processar_requisicoes_vaga(self):
+        '''Thread responsável por processar as requisições de vaga da fila.'''
+        while self.running:
+            try:
+                if self.rv_queue:
+                    car_id = self.rv_queue.popleft()  # Pega a próxima requisição (timeout de 1 segundo)
+                    vaga_alocada = self.allocate_vaga(car_id)
+                    if vaga_alocada:
+                        print(f"Carro {car_id} alocado na vaga {vaga_alocada} pela estação {self.station_number}.")
+                    else:
+                        print(f"Estação {self.station_number}: Nenhuma vaga disponível para o carro {car_id}.")
+                        self.rv_queue.appendleft(car_id)
+                else:
+                    continue
+            except Exception as e:
+                print(f"Erro ao processar requisição de vaga: {e}")
+            continue
+
     def process_message(self, message):
         '''Processa uma mensagem recebida e executa a ação correspondente.'''
-        parts = message.strip().split(", ")
+        parts = message.strip().split(".")
         code = parts[0]
 
         if code == "RV":  # Requisitar vaga
             car_id = parts[1]
-            return self.allocate_vaga(car_id)
+            print(f"Requisição de vaga recebida para o carro {car_id}. Adicionando à fila.")
+            self.rv_queue.append(car_id)
+            return "Carro Adicionado a fila"
+            #return self.allocate_vaga(car_id)
         elif code == "LV":  # Liberar vaga
             car_id = parts[1]
             return self.release_vaga(car_id)
@@ -157,7 +186,7 @@ class Middleware:
         vagas_ocupadas = len([vaga for vaga in self.vagas_controladas if vaga is not None])
         vagas_livres = self.get_vagas_livres()
         response = f"Estação {self.station_number}: Total de vagas: {self.total_vagas}, Ocupadas: {vagas_ocupadas}, Livres: {vagas_livres}"
-        print(f"Debug: Estação {self.station_number} tem {self.total_vagas} vagas.")
+        #print(f"Debug: Estação {self.station_number} tem {self.total_vagas} vagas.")
         return response
 
     def allocate_vaga(self, car_id, force=False):
@@ -186,8 +215,21 @@ class Middleware:
             for neighbor in self.neighbors:
                 resposta = self.consulta_carro_vizinha(car_id, neighbor)
                 if resposta == "ENCONTRADO":
+                    self.enviar_mensagem_vizinha_liberar_vaga(car_id, neighbor)
                     return f"Carro {car_id} liberado na estação {neighbor}"
             return f"Carro {car_id} não foi encontrado."
+
+    def enviar_mensagem_vizinha_liberar_vaga(self, car_id, neighbor):
+        '''Envia uma mensagem à estação vizinha para liberar a vaga do carro.'''
+        # Envia uma mensagem para a estação vizinha liberar a vaga
+        # A mensagem enviada será do tipo "LV,<car_id>"
+        neighbor_port = self.neighbor_ports[neighbor]
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.station_ip, neighbor_port))
+            s.sendall(f"LV.{car_id}".encode())
+            # A estação vizinha receberá a mensagem e atualizará suas vagas
+            resposta = s.recv(1024).decode()
+            print(f"Resposta da estação vizinha {self.station_number}:{neighbor_port} : {resposta}")
 
     def activate_station(self):
         '''Ativa a estação, pinge as estações vizinhas e redistribui as vagas entre as ativas.'''
@@ -235,7 +277,7 @@ class Middleware:
         estacao_port = 8880 + (estacao - 1)
         try:
             with socket.create_connection((self.station_ip, estacao_port), timeout=1) as sock:
-                mensagem = f"UPDATE_VAGAS, {vagas_novas}"
+                mensagem = f"UPDATE_VAGAS.{vagas_novas}"
                 sock.sendall(mensagem.encode())
                 print(f"Atualizando a estação {estacao} para {vagas_novas} vagas.")
         except (ConnectionRefusedError, socket.timeout, socket.error):
@@ -294,7 +336,7 @@ class Middleware:
         estacao_port = 8880 + (estacao - 1)
         try:
             with socket.create_connection((self.station_ip, estacao_port), timeout=1) as sock:
-                mensagem = f"CHECK_CAR, {car_id}"
+                mensagem = f"CHECK_CAR.{car_id}"
                 sock.sendall(mensagem.encode())
                 resposta = sock.recv(1024).decode()
                 return resposta
@@ -370,7 +412,7 @@ class Middleware:
         carros_str = ";".join(carros)
         try:
             with socket.create_connection((self.station_ip, estacao_port), timeout=5) as sock:
-                mensagem = f"ALLOCATE_CARS, {carros_str}"
+                mensagem = f"ALLOCATE_CARS.{carros_str}"
                 sock.sendall(mensagem.encode())
                 resposta = sock.recv(1024).decode()
                 if "Carros alocados" in resposta:
@@ -397,7 +439,7 @@ class Middleware:
             neighbor_port = self.neighbor_ports[neighbor]
             try:
                 with socket.create_connection((self.station_ip, neighbor_port), timeout=1) as sock:
-                    mensagem = f"STATION_DOWN, {self.station_number}, {carros_str}"
+                    mensagem = f"STATION_DOWN.{self.station_number}.{carros_str}"
                     sock.sendall(mensagem.encode())
             except (ConnectionRefusedError, socket.timeout, socket.error):
                 pass  # Ignora erros de conexão
@@ -408,15 +450,29 @@ class Middleware:
             self.desligar_estacao()
 
 
+
+
+
+
 if __name__ == "__main__":
-    try:
-        station_number = int(input("Digite o número da estação (1-10): "))
+    parser = argparse.ArgumentParser(description='Middleware para estações.')
+    parser.add_argument('--station', type=int, help='Número da estação (1-10)', default=None)
+
+    args = parser.parse_args()
+    if args.station is not None:
+        station_number = args.station
         if not (1 <= station_number <= 10):
             print("Erro: O número da estação deve ser entre 1 e 10.")
             exit(1)
-    except ValueError:
-        print("Erro: Por favor, digite um número válido para a estação.")
-        exit(1)
+    else:
+        try:
+            station_number = int(input("Digite o número da estação (1-10): "))
+            if not (1 <= station_number <= 10):
+                print("Erro: O número da estação deve ser entre 1 e 10.")
+                exit(1)
+        except ValueError:
+            print("Erro: Por favor, digite um número válido para a estação.")
+            exit(1)
 
     neighbors = [n for n in range(1, 11) if n != station_number]
     middleware = Middleware(station_number, neighbors)

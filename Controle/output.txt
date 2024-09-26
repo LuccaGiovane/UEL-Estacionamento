@@ -1,0 +1,41 @@
+Estação 1: Total de vagas: 10, Ocupadas: 2, Livres: 8
+Estação 1: Total de vagas: 10, Ocupadas: 3, Livres: 7
+Estação 1: Total de vagas: 10, Ocupadas: 4, Livres: 6
+Estação 1: Total de vagas: 10, Ocupadas: 8, Livres: 2
+247906
+214180
+213883
+304125
+235420
+260228
+1124387
+1101142
+1101525
+Estação 1: Total de vagas: 10, Ocupadas: 3, Livres: 7
+Estação 2: Total de vagas: 10, Ocupadas: 4, Livres: 6
+1241310
+78392
+1207255
+Estação 3: Total de vagas: 10, Ocupadas: 5, Livres: 5
+1242315
+Estação 4: Total de vagas: 10, Ocupadas: 0, Livres: 10
+111607
+Estação 5: Total de vagas: 10, Ocupadas: 0, Livres: 10
+Estação 6: Total de vagas: 10, Ocupadas: 0, Livres: 10
+188040
+188357
+Estação 7: Total de vagas: 10, Ocupadas: 0, Livres: 10
+Estação 8: Total de vagas: 10, Ocupadas: 0, Livres: 10
+Estação 9: Total de vagas: 10, Ocupadas: 0, Livres: 10
+Estação 10: Total de vagas: 10, Ocupadas: 0, Livres: 10
+180113
+254043
+235601
+314677
+314264
+277546
+280828
+333685
+2218192
+1140771
+1147537

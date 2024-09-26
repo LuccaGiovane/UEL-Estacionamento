@@ -45,7 +45,7 @@ class App:
         try:
             port = self.middleware_ports[station_number]
             with socket.create_connection((self.middleware_ip, port), timeout=5) as sock:
-                message = f"RV, {car_id}"
+                message = f"RV.{car_id}"
                 sock.sendall(message.encode())
                 response = sock.recv(1024).decode()
                 print(f"Resposta da estação {station_number} para o carro {car_id}: {response}")
@@ -60,7 +60,7 @@ class App:
         try:
             port = self.middleware_ports[station_number]
             with socket.create_connection((self.middleware_ip, port), timeout=5) as sock:
-                message = f"LV, {car_id}"
+                message = f"LV.{car_id}"
                 sock.sendall(message.encode())
                 response = sock.recv(1024).decode()
                 print(f"Resposta da estação {station_number} para o carro {car_id}: {response}")

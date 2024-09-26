@@ -1,0 +1,20 @@
+
+
+======
+Não consegui testar salvar o tempo no arquivo de saída.
+======
+
+Arquivo "file.txt"
+Lista das estações {nome, IP, Porta}
+
+Arquivo "commands.txt"
+Controla a simulação, com os seguintes comandos:
+
+VD N => vagas disponíveis {lista com estações ativas, qtd vagas ocupadas e disponíveis para cada estação}
+AE N => ativar estação N
+FE N => falha na estação N
+
+OBS: toda msg recebida deve ser respondida, ex. um "OK"
+
+RV N => requisição de vaga na estação N {simula um carro chegando ao estacionamento}
+OBS: o carro aguarda um tempo aleatório depois sai do estacionamento

@@ -16,7 +16,7 @@ class Car : public Communication {
 public:
     Car();
     ~Car();
-    void carThread(string dest_IP, int dest_Port, string exit_IP, int exit_Port);
+    void carThread(string dest_IP, int dest_Port, string exit_IP, int exit_Port, string carID);
     void writeToFile(string text);
 private:
     ofstream outResultFile;
