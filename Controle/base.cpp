@@ -52,6 +52,8 @@ string Communication::sendMessage(const std::string& server_ip, int server_port,
     return (std::string(buffer, valread));
 }
 
+
+
 string Communication::actFunction( string dest_IP, int dest_Port, string cmd){
     string response;
     response = Communication::sendMessage(dest_IP, dest_Port, cmd);
