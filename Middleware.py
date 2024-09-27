@@ -3,6 +3,7 @@ import socket
 import threading
 import time
 import argparse
+import random
 
 from collections import deque
 
@@ -167,7 +168,11 @@ class Middleware:
 
                 estacoes_ativas = list(self.active_stations.keys())
                 estacoes_ativas.append(self.station_number)
-                coordenador = min(estacoes_ativas)
+
+                #Escolhe aleatoriamente entre as estações ativas o coordenador da eleição
+                coordenador = random.choice(estacoes_ativas)
+                #coordenador = min(estacoes_ativas)
+
                 if self.station_number == coordenador:
                     # Apenas o coordenador processa a redistribuição
                     self.eleicao_estacao_falha(estacao_desligada, carros_estacao_falha)
